@@ -1,11 +1,9 @@
 set(srcs
-    "src/cvec.c"
-    "src/fmat.c"
-    "src/fvec.c"
-    "src/lvec.c"
-    "src/mathutils.c"
-    "src/musicutils.c"
-    "src/vecutils.c"
+    "src/io/ioutils.c"
+    "src/io/sink_wavwrite.c"
+    "src/io/sink.c"
+    "src/io/source_wavread.c"
+    "src/io/source.c"
     "src/onset/peakpicker.c"
     "src/spectral/fft.c"
     "src/spectral/ooura_fft8g.c"
@@ -19,6 +17,13 @@ set(srcs
     "src/utils/hist.c"
     "src/utils/log.c"
     "src/utils/scale.c"
+    "src/cvec.c"
+    "src/fmat.c"
+    "src/fvec.c"
+    "src/lvec.c"
+    "src/mathutils.c"
+    "src/musicutils.c"
+    "src/vecutils.c"
 )
 
 set(incs "src")
@@ -53,4 +58,5 @@ component_compile_definitions(
     HAVE_LIMITS_H
     HAVE_STDARG_H
     #HAVE_BLAS
+    HAVE_WAVWRITE
 )
