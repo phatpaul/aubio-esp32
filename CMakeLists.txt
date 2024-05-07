@@ -5,6 +5,8 @@ set(srcs
     "src/io/source_wavread.c"
     "src/io/source.c"
     "src/onset/peakpicker.c"
+    "src/onset/onset.c"
+    "src/spectral/awhitening.c"
     "src/spectral/fft.c"
     "src/spectral/ooura_fft8g.c"
     "src/spectral/phasevoc.c"
