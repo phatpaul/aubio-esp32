@@ -61,5 +61,5 @@ component_compile_definitions(
     HAVE_STDARG_H
     #HAVE_BLAS
     HAVE_WAVWRITE
-    AUBIO_BEAT_WARNINGS=1
+    #AUBIO_BEAT_WARNINGS=1
 )
