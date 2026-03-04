@@ -1,8 +1,12 @@
+# python circleci 2.1 configuration
+# see https://circleci.com/docs/2.1/language-python/
+version: 2.1
+
 apt-run: &apt-install
   name: Install apt packages
   command: |
     sudo apt-get update
-    sudo apt-get -y install make sox pkg-config libavcodec-dev libavformat-dev libavresample-dev libavutil-dev libsndfile1-dev libsamplerate-dev librubberband-dev libvorbis-dev libflac-dev
+    sudo apt-get -y install make sox pkg-config libavcodec-dev libavformat-dev libswresample-dev libavutil-dev libsndfile1-dev libsamplerate-dev librubberband-dev libvorbis-dev libflac-dev
 
 pip-install: &pip-install
   name: Install pip dependencies
@@ -36,22 +40,7 @@ uninstall-wheel: &uninstall-wheel
     pip show -f aubio
     pip uninstall --verbose --yes aubio
 
-version: 2
 jobs:
-  build-27:
-    docker:
-      - image: cimg/python:2.7
-    steps:
-      - checkout
-      - run: *apt-install
-      - run: *pip-install
-      - run: *build-wheel
-      - run: *install-wheel
-      - run: *test-pytest
-      - run: *uninstall-wheel
-      - store_artifacts:
-          path: dist/
-
   build-36:
     docker:
       - image: cimg/python:3.6
@@ -93,12 +82,40 @@ jobs:
       - store_artifacts:
           path: dist/
 
+  build-312:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run: *apt-install
+      - run: *pip-install
+      - run: *build-wheel
+      - run: *install-wheel
+      - run: *test-pytest
+      - run: *uninstall-wheel
+      - store_artifacts:
+          path: dist/
+
+  build-312-nodeps:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run: *pip-install
+      - run: *build-wheel
+      - run: *install-wheel
+      - run: *test-pytest-nosounds
+      - run: *uninstall-wheel
+      - store_artifacts:
+          path: dist/
+
 workflows:
   version: 2
 
   test-wheel:
     jobs:
-      - build-27
       - build-36
       - build-310
       - build-310-nodeps
+      - build-312
+      - build-312-nodeps

@@ -92,6 +92,8 @@
 // include accelerate framework after blas
 #define HAVE_ATLAS 1
 #define HAVE_BLAS 1
+#define ACCELERATE_NEW_LAPACK 1
+#define ACCELERATE_LAPACK_ILP6 1
 #include <Accelerate/Accelerate.h>
 
 #ifndef HAVE_AUBIO_DOUBLE
@@ -260,7 +262,7 @@ uint_t aubio_log(sint_t level, const char_t *fmt, ...);
 #define AUBIO_ERROR   AUBIO_ERR
 
 #define AUBIO_QUIT(_s)               exit(_s)
-#define AUBIO_SPRINTF                sprintf
+#define AUBIO_SNPRINTF               snprintf
 
 #define AUBIO_MAX_SAMPLERATE (192000*8)
 #define AUBIO_MAX_CHANNELS 1024
@@ -341,7 +343,7 @@ uint_t aubio_log(sint_t level, const char_t *fmt, ...);
 #define isnan _isnan
 #endif
 
-#if !defined(_MSC_VER)
+#if !defined(_WIN32)
 #define AUBIO_STRERROR(errno,buf,len) strerror_r(errno, buf, len)
 #else
 #define AUBIO_STRERROR(errno,buf,len) strerror_s(buf, len, errno)

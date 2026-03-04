@@ -40,10 +40,14 @@ class aubio_cvec_test_case(TestCase):
         assert_equal(spec.phas, 0)
 
     def test_assign_cvec_phas_slice(self):
+        if float_type == 'float64':
+            pi = np.float64(np.pi)
+        else:
+            pi = np.float32(np.pi)
         spec = cvec(1024)
-        spec.phas[39:-1] = -np.pi
+        spec.phas[39:-1] = -pi
         assert_equal(spec.phas[0:39], 0)
-        assert_equal(spec.phas[39:-1], -np.pi)
+        assert_equal(spec.phas[39:-1], -pi)
         assert_equal(spec.norm, 0)
 
     def test_assign_cvec_with_other_cvec(self):

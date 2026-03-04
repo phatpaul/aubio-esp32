@@ -18,6 +18,7 @@ __aubio_version__ = get_aubio_version()
 include_dirs = []
 library_dirs = []
 define_macros = [('AUBIO_VERSION', '%s' % __aubio_version__)]
+extra_compile_args = []
 extra_link_args = []
 
 include_dirs += ['python/ext']
@@ -30,6 +31,8 @@ except ImportError:
 if sys.platform.startswith('darwin'):
     extra_link_args += ['-framework', 'CoreFoundation',
             '-framework', 'AudioToolbox']
+elif sys.platform == 'win32':
+    extra_compile_args += ['/utf-8']
 
 sources = sorted(glob.glob(os.path.join('python', 'ext', '*.c')))
 
@@ -37,6 +40,7 @@ aubio_extension = Extension("aubio._aubio",
     sources,
     include_dirs = include_dirs,
     library_dirs = library_dirs,
+    extra_compile_args = extra_compile_args,
     extra_link_args = extra_link_args,
     define_macros = define_macros)
 

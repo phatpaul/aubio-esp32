@@ -24,11 +24,7 @@
 
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#if defined(HAVE_SWRESAMPLE)
 #include <libswresample/swresample.h>
-#elif defined(HAVE_AVRESAMPLE)
-#include <libavresample/avresample.h>
-#endif
 #include <libavutil/opt.h>
 
 // determine whether we use libavformat from ffmpeg or from libav
@@ -56,6 +52,12 @@
 #define av_packet_unref av_free_packet
 #endif
 
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(57,28,100)
+//#warning "libavutil < 57.28.100 is deprecated"
+#else
+#define LIBAVUTIL_HAS_CH_LAYOUT
+#endif
+
 #include "aubio_priv.h"
 #include "fvec.h"
 #include "fmat.h"
@@ -64,8 +66,10 @@
 
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(56, 56, 0)
 #define AUBIO_AVCODEC_MAX_BUFFER_SIZE FF_MIN_BUFFER_SIZE
-#else
+#elif LIBAVCODEC_VERSION_INT < AV_VERSION_INT(60, 40, 100)
 #define AUBIO_AVCODEC_MAX_BUFFER_SIZE AV_INPUT_BUFFER_MIN_SIZE
+#else
+#define AUBIO_AVCODEC_MAX_BUFFER_SIZE 16384
 #endif
 
 #if LIBAVCODEC_VERSION_MAJOR >= 59
@@ -91,11 +95,7 @@ struct _aubio_source_avcodec_t {
 #else
   AVPacket avPacket;
 #endif
-#ifdef HAVE_AVRESAMPLE
-  AVAudioResampleContext *avr;
-#elif defined(HAVE_SWRESAMPLE)
   SwrContext *avr;
-#endif
   smpl_t *output;
   uint_t read_samples;
   uint_t read_index;
@@ -138,7 +138,7 @@ aubio_source_avcodec_t * new_aubio_source_avcodec(const char_t * path,
   AVCodecParameters *codecpar;
 #endif
 
-  AVCodec *codec;
+  const AVCodec *codec;
   uint_t i;
   int err;
   if (path == NULL) {
@@ -271,7 +271,11 @@ aubio_source_avcodec_t * new_aubio_source_avcodec(const char_t * path,
 
   /* get input specs */
   s->input_samplerate = avCodecCtx->sample_rate;
+#ifdef LIBAVUTIL_HAS_CH_LAYOUT
+  s->input_channels   = avCodecCtx->ch_layout.nb_channels;
+#else
   s->input_channels   = avCodecCtx->channels;
+#endif
   //AUBIO_DBG("input_samplerate: %d\n", s->input_samplerate);
   //AUBIO_DBG("input_channels: %d\n", s->input_channels);
 
@@ -336,16 +340,27 @@ void aubio_source_avcodec_reset_resampler(aubio_source_avcodec_t * s)
   // create or reset resampler to/from mono/multi-channel
   if ( s->avr == NULL ) {
     int err;
+    SwrContext *avr = swr_alloc();
+#ifdef LIBAVUTIL_HAS_CH_LAYOUT
+    AVChannelLayout input_layout;
+    AVChannelLayout output_layout;
+    av_channel_layout_default(&input_layout, s->input_channels);
+    av_channel_layout_default(&output_layout, s->input_channels);
+
+#if LIBSWRESAMPLE_VERSION_INT < AV_VERSION_INT (4, 5, 100)
+    av_opt_set_chlayout(avr, "in_channel_layout",  &input_layout,        0);
+    av_opt_set_chlayout(avr, "out_channel_layout", &output_layout,       0);
+#else
+    av_opt_set_chlayout(avr, "in_chlayout",  &input_layout,        0);
+    av_opt_set_chlayout(avr, "out_chlayout", &output_layout,       0);
+#endif
+#else
     int64_t input_layout = av_get_default_channel_layout(s->input_channels);
     int64_t output_layout = av_get_default_channel_layout(s->input_channels);
-#ifdef HAVE_AVRESAMPLE
-    AVAudioResampleContext *avr = avresample_alloc_context();
-#elif defined(HAVE_SWRESAMPLE)
-    SwrContext *avr = swr_alloc();
-#endif /* HAVE_AVRESAMPLE || HAVE_SWRESAMPLE */
 
     av_opt_set_int(avr, "in_channel_layout",  input_layout,              0);
     av_opt_set_int(avr, "out_channel_layout", output_layout,             0);
+#endif
     av_opt_set_int(avr, "in_sample_rate",     s->input_samplerate,       0);
     av_opt_set_int(avr, "out_sample_rate",    s->samplerate,             0);
     av_opt_set_int(avr, "in_sample_fmt",      s->avCodecCtx->sample_fmt, 0);
@@ -356,11 +371,7 @@ void aubio_source_avcodec_reset_resampler(aubio_source_avcodec_t * s)
 #endif
     // TODO: use planar?
     //av_opt_set_int(avr, "out_sample_fmt",     AV_SAMPLE_FMT_FLTP,      0);
-#ifdef HAVE_AVRESAMPLE
-    if ( ( err = avresample_open(avr) ) < 0)
-#elif defined(HAVE_SWRESAMPLE)
     if ( ( err = swr_init(avr) ) < 0)
-#endif /* HAVE_AVRESAMPLE || HAVE_SWRESAMPLE */
     {
       char errorstr[256];
       av_strerror (err, errorstr, sizeof(errorstr));
@@ -383,23 +394,15 @@ void aubio_source_avcodec_readframe(aubio_source_avcodec_t *s,
 #else
   AVPacket *avPacket = &s->avPacket;
 #endif
-#ifdef HAVE_AVRESAMPLE
-  AVAudioResampleContext *avr = s->avr;
-#elif defined(HAVE_SWRESAMPLE)
   SwrContext *avr = s->avr;
-#endif /* HAVE_AVRESAMPLE || HAVE_SWRESAMPLE */
   int got_frame = 0;
-#ifdef HAVE_AVRESAMPLE
-  int in_linesize = 0;
   int in_samples = avFrame->nb_samples;
-  int out_linesize = 0;
-  int max_out_samples = AUBIO_AVCODEC_MAX_BUFFER_SIZE;
-  int out_samples = 0;
-#elif defined(HAVE_SWRESAMPLE)
-  int in_samples = avFrame->nb_samples;
+#ifdef LIBAVUTIL_HAS_CH_LAYOUT
+  int max_out_samples = AUBIO_AVCODEC_MAX_BUFFER_SIZE / avCodecCtx->ch_layout.nb_channels;
+#else
   int max_out_samples = AUBIO_AVCODEC_MAX_BUFFER_SIZE / avCodecCtx->channels;
+#endif
   int out_samples = 0;
-#endif /* HAVE_AVRESAMPLE || HAVE_SWRESAMPLE */
   smpl_t *output = s->output;
 #ifndef FF_API_LAVF_AVCTX
   int len = 0;
@@ -466,33 +469,27 @@ void aubio_source_avcodec_readframe(aubio_source_avcodec_t *s,
   }
 
 #if LIBAVUTIL_VERSION_MAJOR > 52
-  if (avFrame->channels != (sint_t)s->input_channels) {
+#ifdef LIBAVUTIL_HAS_CH_LAYOUT
+  int frame_channels = avFrame->ch_layout.nb_channels;
+#else
+  int frame_channels = avFrame->channels;
+#endif
+  if (frame_channels != (sint_t)s->input_channels) {
     AUBIO_WRN ("source_avcodec: trying to read from %d channel(s),"
         "but configured for %d; is '%s' corrupt?\n",
-        avFrame->channels, s->input_channels, s->path);
+        frame_channels, s->input_channels, s->path);
     goto beach;
   }
 #else
 #warning "avutil < 53 is deprecated, crashes might occur on corrupt files"
 #endif
 
-#ifdef HAVE_AVRESAMPLE
-  in_linesize = 0;
-  av_samples_get_buffer_size(&in_linesize, avCodecCtx->channels,
-      avFrame->nb_samples, avCodecCtx->sample_fmt, 1);
   in_samples = avFrame->nb_samples;
-  out_linesize = 0;
   max_out_samples = AUBIO_AVCODEC_MAX_BUFFER_SIZE;
-  out_samples = avresample_convert ( avr,
-        (uint8_t **)&output, out_linesize, max_out_samples,
-        (uint8_t **)avFrame->data, in_linesize, in_samples);
-#elif defined(HAVE_SWRESAMPLE)
-  in_samples = avFrame->nb_samples;
-  max_out_samples = AUBIO_AVCODEC_MAX_BUFFER_SIZE / avCodecCtx->channels;
+  if (frame_channels > 0) max_out_samples /= frame_channels;
   out_samples = swr_convert( avr,
       (uint8_t **)&output, max_out_samples,
       (const uint8_t **)avFrame->data, in_samples);
-#endif /* HAVE_AVRESAMPLE || HAVE_SWRESAMPLE */
   if (out_samples < 0) {
     AUBIO_WRN("source_avcodec: error while resampling %s (%d)\n",
         s->path, out_samples);
@@ -626,19 +623,13 @@ uint_t aubio_source_avcodec_seek (aubio_source_avcodec_t * s, uint_t pos) {
   s->eof = 0;
   s->read_index = 0;
   s->read_samples = 0;
-#ifdef HAVE_AVRESAMPLE
-  // reset the AVAudioResampleContext
-  avresample_close(s->avr);
-  avresample_open(s->avr);
-#elif defined(HAVE_SWRESAMPLE)
   swr_close(s->avr);
   swr_init(s->avr);
-#endif
   return ret;
 }
 
 uint_t aubio_source_avcodec_get_duration (aubio_source_avcodec_t * s) {
-  if (s && &(s->avFormatCtx) != NULL) {
+  if (s && s->avFormatCtx != NULL) {
     int64_t duration = s->avFormatCtx->duration;
     return s->samplerate * ((uint_t)duration / 1e6 );
   }
@@ -647,13 +638,8 @@ uint_t aubio_source_avcodec_get_duration (aubio_source_avcodec_t * s) {
 
 uint_t aubio_source_avcodec_close(aubio_source_avcodec_t * s) {
   if (s->avr != NULL) {
-#ifdef HAVE_AVRESAMPLE
-    avresample_close( s->avr );
-    av_free ( s->avr );
-#elif defined(HAVE_SWRESAMPLE)
     swr_close ( s->avr );
     swr_free ( &s->avr );
-#endif
   }
   s->avr = NULL;
   if (s->avCodecCtx != NULL) {

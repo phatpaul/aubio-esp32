@@ -11,6 +11,7 @@
 # For more info about waf, see http://code.google.com/p/waf/ .
 
 import sys
+import subprocess
 
 APPNAME = 'aubio'
 
@@ -234,13 +235,13 @@ def configure(ctx):
         ctx.env['cshlib_PATTERN'] = 'lib%s.dll'
 
     if target_platform == 'darwin' and ctx.options.enable_fat:
-        ctx.env.CFLAGS += ['-arch', 'i386', '-arch', 'x86_64']
-        ctx.env.LINKFLAGS += ['-arch', 'i386', '-arch', 'x86_64']
-        MINSDKVER="10.4"
+        ctx.env.CFLAGS += ['-arch', 'arm64', '-arch', 'x86_64']
+        ctx.env.LINKFLAGS += ['-arch', 'arm64', '-arch', 'x86_64']
+        MINSDKVER="13.3"
         ctx.env.CFLAGS += [ '-mmacosx-version-min=' + MINSDKVER ]
         ctx.env.LINKFLAGS += [ '-mmacosx-version-min=' + MINSDKVER ]
 
-    if target_platform in [ 'darwin', 'ios', 'iosimulator']:
+    if target_platform in [ 'darwin', 'ios', 'iosimulator' ]:
         if (ctx.options.enable_apple_audio != False):
             ctx.env.FRAMEWORK += ['CoreFoundation', 'AudioToolbox']
             ctx.define('HAVE_SOURCE_APPLE_AUDIO', 1)
@@ -257,37 +258,105 @@ def configure(ctx):
             ctx.msg('Checking for Accelerate framework', 'no (disabled)',
                     color = 'YELLOW')
 
-    if target_platform in [ 'ios', 'iosimulator' ]:
-        MINSDKVER="6.1"
-        ctx.env.CFLAGS += ['-std=c99']
-        if (ctx.options.enable_apple_audio != False):
-            ctx.define('HAVE_AUDIO_UNIT', 1)
-            #ctx.env.FRAMEWORK += ['CoreFoundation', 'AudioToolbox']
+    if target_platform in [ 'ios', 'iosimulator', 'watchos', 'watchsimulator',
+                            'tvos', 'tvsimulator', 'visionos', 'visionsimulator' ]:
+        if target_platform in ['ios', 'iosimulator']:
+            MINSDKVER="16.4"
+        elif target_platform in ['watchos', 'watchsimulator']:
+            MINSDKVER="8.0"
+        elif target_platform in ['tvos', 'tvsimulator']:
+            MINSDKVER="9.0"
+        elif target_platform in ['visionos', 'visionsimulator']:
+            MINSDKVER="1.0"
+        xcodeslct_output = subprocess.check_output (['xcode-select', '--print-path'])
+        XCODEPATH = xcodeslct_output.decode(sys.stdout.encoding).strip()
         if target_platform == 'ios':
-            DEVROOT = "/Applications/Xcode.app/Contents"
-            DEVROOT += "/Developer/Platforms/iPhoneOS.platform/Developer"
-            SDKROOT = "%(DEVROOT)s/SDKs/iPhoneOS.sdk" % locals()
+            SDKNAME = "iPhoneOS"
+        elif target_platform == 'iosimulator':
+            SDKNAME = "iPhoneSimulator"
+        elif target_platform == 'watchos':
+            SDKNAME = "WatchOS"
+        elif target_platform == 'watchsimulator':
+            SDKNAME = "WatchSimulator"
+        elif target_platform == 'tvos':
+            SDKNAME = "AppleTVOS"
+        elif target_platform == 'tvsimulator':
+            SDKNAME = "AppleTVSimulator"
+        elif target_platform == 'visionos':
+            SDKNAME = "XROS"
+        elif target_platform == 'visionsimulator':
+            SDKNAME = "XRSimulator"
+        else:
+            raise ctx.errors.ConfigurationError ("Error: unknown target platform '"
+                + target_platform + "'")
+        DEVROOT = "%(XCODEPATH)s/Platforms/%(SDKNAME)s.platform/Developer" % locals()
+        SDKROOT = "%(DEVROOT)s/SDKs/%(SDKNAME)s.sdk" % locals()
+        ctx.env.CFLAGS += ['-std=c99']
+        if ctx.options.enable_apple_audio != False and target_platform.startswith ('ios'):
+            #ctx.define('HAVE_AUDIO_UNIT', 1)
+            #ctx.env.FRAMEWORK += ['CoreFoundation', 'AudioToolbox']
+            pass
+        if target_platform == 'ios':
             ctx.env.CFLAGS += [ '-fembed-bitcode' ]
             ctx.env.CFLAGS += [ '-arch', 'arm64' ]
-            ctx.env.CFLAGS += [ '-arch', 'armv7' ]
-            ctx.env.CFLAGS += [ '-arch', 'armv7s' ]
+            #ctx.env.CFLAGS += [ '-arch', 'armv7' ]
+            #ctx.env.CFLAGS += [ '-arch', 'armv7s' ]
             ctx.env.LINKFLAGS += [ '-arch', 'arm64' ]
-            ctx.env.LINKFLAGS += ['-arch', 'armv7']
-            ctx.env.LINKFLAGS += ['-arch', 'armv7s']
+            #ctx.env.LINKFLAGS += ['-arch', 'armv7']
+            #ctx.env.LINKFLAGS += ['-arch', 'armv7s']
             ctx.env.CFLAGS += [ '-miphoneos-version-min=' + MINSDKVER ]
             ctx.env.LINKFLAGS += [ '-miphoneos-version-min=' + MINSDKVER ]
-        else:
-            DEVROOT = "/Applications/Xcode.app/Contents"
-            DEVROOT += "/Developer/Platforms/iPhoneSimulator.platform/Developer"
-            SDKROOT = "%(DEVROOT)s/SDKs/iPhoneSimulator.sdk" % locals()
-            ctx.env.CFLAGS += [ '-arch', 'i386' ]
+        elif target_platform == 'iosimulator':
             ctx.env.CFLAGS += [ '-arch', 'x86_64' ]
-            ctx.env.LINKFLAGS += ['-arch', 'i386']
+            ctx.env.CFLAGS += [ '-arch', 'arm64' ]
             ctx.env.LINKFLAGS += ['-arch', 'x86_64']
+            ctx.env.LINKFLAGS += ['-arch', 'arm64']
             ctx.env.CFLAGS += [ '-mios-simulator-version-min=' + MINSDKVER ]
             ctx.env.LINKFLAGS += [ '-mios-simulator-version-min=' + MINSDKVER ]
-        ctx.env.CFLAGS += [ '-isysroot' , SDKROOT]
-        ctx.env.LINKFLAGS += [ '-isysroot' , SDKROOT]
+        elif target_platform == 'watchos':
+            ctx.env.CFLAGS += [ '-arch', 'armv7' ]
+            ctx.env.CFLAGS += [ '-arch', 'armv7s' ]
+            ctx.env.LINKFLAGS += ['-arch', 'armv7']
+            ctx.env.LINKFLAGS += ['-arch', 'armv7s']
+            ctx.env.CFLAGS += [ '-mwatchos-version-min=' + MINSDKVER ]
+            ctx.env.LINKFLAGS += [ '-mwatchos-version-min=' + MINSDKVER ]
+        elif target_platform == 'watchsimulator':
+            ctx.env.CFLAGS += [ '-arch', 'x86_64' ]
+            ctx.env.CFLAGS += [ '-arch', 'arm64' ]
+            ctx.env.LINKFLAGS += ['-arch', 'x86_64']
+            ctx.env.LINKFLAGS += ['-arch', 'arm64']
+            ctx.env.CFLAGS += [ '-mwatchsimulator-version-min=' + MINSDKVER ]
+            ctx.env.LINKFLAGS += [ '-mwatchsimulator-version-min=' + MINSDKVER ]
+        elif target_platform == 'tvos':
+            ctx.env.CFLAGS += [ '-arch', 'arm64' ]
+            ctx.env.CFLAGS += [ '-arch', 'arm64e' ]
+            ctx.env.LINKFLAGS += ['-arch', 'arm64']
+            ctx.env.LINKFLAGS += ['-arch', 'arm64e']
+            ctx.env.CFLAGS += [ '-mtvos-version-min=' + MINSDKVER ]
+            ctx.env.LINKFLAGS += [ '-mtvos-version-min=' + MINSDKVER ]
+        elif target_platform == 'tvsimulator':
+            ctx.env.CFLAGS += [ '-arch', 'x86_64' ]
+            ctx.env.CFLAGS += [ '-arch', 'arm64' ]
+            ctx.env.LINKFLAGS += ['-arch', 'x86_64']
+            ctx.env.LINKFLAGS += ['-arch', 'arm64']
+            ctx.env.CFLAGS += [ '-mtvos-simulator-version-min=' + MINSDKVER ]
+            ctx.env.LINKFLAGS += [ '-mtvos-simulator-version-min=' + MINSDKVER ]
+        elif target_platform == 'visionos':
+            ctx.env.CFLAGS += [ '-arch', 'arm64' ]
+            ctx.env.CFLAGS += [ '-arch', 'arm64e' ]
+            ctx.env.LINKFLAGS += ['-arch', 'arm64']
+            ctx.env.LINKFLAGS += ['-arch', 'arm64e']
+        elif target_platform == 'visionsimulator':
+            ctx.env.CFLAGS += [ '-arch', 'x86_64' ]
+            ctx.env.CFLAGS += [ '-arch', 'arm64' ]
+            ctx.env.LINKFLAGS += ['-arch', 'x86_64']
+            ctx.env.LINKFLAGS += ['-arch', 'arm64']
+        if target_platform not in ['visionos', 'visionsimulator']:
+            ctx.env.CFLAGS += [ '-isysroot' , SDKROOT]
+            ctx.env.LINKFLAGS += [ '-isysroot' , SDKROOT]
+        else:
+            ctx.env.CFLAGS += [ '--sysroot' , SDKROOT]
+            ctx.env.LINKFLAGS += [ '--sysroot' , SDKROOT]
 
     if target_platform == 'emscripten':
         if ctx.options.build_type == "debug":
@@ -450,11 +519,6 @@ def configure(ctx):
                 args = '--cflags --libs libswresample >= 1.2.0',
                 uselib_store = 'SWRESAMPLE',
                 mandatory = False)
-        if 'HAVE_SWRESAMPLE' not in ctx.env:
-            ctx.check_cfg(package = 'libavresample',
-                    args = '--cflags --libs libavresample >= 1.0.1',
-                    uselib_store = 'AVRESAMPLE',
-                    mandatory = False)
 
         msg_check = 'Checking for all libav libraries'
         if 'HAVE_AVCODEC' not in ctx.env:
@@ -463,16 +527,11 @@ def configure(ctx):
             ctx.msg(msg_check, 'not found (missing avformat)', color = 'YELLOW')
         elif 'HAVE_AVUTIL' not in ctx.env:
             ctx.msg(msg_check, 'not found (missing avutil)', color = 'YELLOW')
-        elif 'HAVE_SWRESAMPLE' not in ctx.env \
-                and 'HAVE_AVRESAMPLE' not in ctx.env:
-            resample_missing = 'not found (avresample or swresample required)'
+        elif 'HAVE_SWRESAMPLE' not in ctx.env :
+            resample_missing = 'not found (missing swresample)'
             ctx.msg(msg_check, resample_missing, color = 'YELLOW')
         else:
             ctx.msg(msg_check, 'yes')
-            if 'HAVE_SWRESAMPLE' in ctx.env:
-                ctx.define('HAVE_SWRESAMPLE', 1)
-            elif 'HAVE_AVRESAMPLE' in ctx.env:
-                ctx.define('HAVE_AVRESAMPLE', 1)
             ctx.define('HAVE_LIBAV', 1)
 
     # check for vorbisenc
@@ -561,7 +620,8 @@ def build(bld):
     bld.recurse('src')
 
     # add sub directories
-    if bld.env['DEST_OS'] not in ['ios', 'iosimulator', 'android']:
+    if bld.env['DEST_OS'] not in ['ios', 'iosimulator', 'watchos', 'watchsimulator',
+                'tvos', 'tvsimulator', 'visionos', 'visionsimulator', 'android']:
         if bld.env['DEST_OS']=='emscripten' and not bld.options.testcmd:
             bld.options.testcmd = 'node %s'
         if bld.options.enable_examples:
@@ -604,11 +664,12 @@ def txt2man(bld):
 
 def doxygen(bld):
     # build documentation from source files using doxygen
-    if bld.env['DOXYGEN']:
+    from waflib import Utils
+    if bld.env['DOXYGEN'] and not Utils.is_win32:
         bld.env.VERSION = VERSION
         rule = '( cat ${SRC[0]} && echo PROJECT_NUMBER=${VERSION}'
         rule += ' && echo OUTPUT_DIRECTORY=%s && echo HTML_OUTPUT=%s )'
-        rule += ' | doxygen - > /dev/null'
+        rule += ' | ${DOXYGEN} - > /dev/null'
         rule %= (os.path.abspath(out), 'api')
         bld( name = 'doxygen', rule = rule,
                 source = ['doc/web.cfg']

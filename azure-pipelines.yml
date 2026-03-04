@@ -6,10 +6,25 @@ jobs:
     vmImage: 'ubuntu-latest'
   steps:
   - script: |
-      sudo apt install libavformat-dev librubberband-dev
+      sudo apt update
+      sudo apt install libsndfile-dev libavformat-dev librubberband-dev libvorbis-dev libflac-dev
     displayName: 'deps'
   - script: |
       make
+    displayName: 'make'
+    env:
+      CFLAGS: -Werror
+
+- job: linux_double
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - script: |
+      sudo apt update
+      sudo apt install libfftw3-dev libsndfile-dev libavformat-dev librubberband-dev libvorbis-dev libflac-dev
+    displayName: 'deps'
+  - script: |
+      HAVE_AUBIO_DOUBLE=1 WAFOPTS="--enable-fftw3" make
     displayName: 'make'
     env:
       CFLAGS: -Werror
